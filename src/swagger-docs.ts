@@ -545,3 +545,66 @@
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
+
+/**
+ * @swagger
+ * /api/agent/run:
+ *   post:
+ *     summary: Run agent once (Demo Mode)
+ *     description: |
+ *       Triggers a single run of the agent logic. This is useful for demos and testing.
+ *       The agent will:
+ *       1. Initialize/verify its on-chain identity
+ *       2. Read the current pool state
+ *       3. Find all deposits assigned to this agent
+ *       4. Process each deposit (analyze with AI and execute decisions)
+ *       5. Return the results of all processed deposits
+ *       
+ *       **Note**: This does NOT run in a loop. Call this endpoint each time you want to trigger agent processing.
+ *     tags: [Operations]
+ *     responses:
+ *       200:
+ *         description: Agent run completed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AgentRunResult'
+ *       500:
+ *         description: Failed to run agent
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+
+/**
+ * @swagger
+ * /api/agent/status:
+ *   get:
+ *     summary: Get agent status
+ *     description: Returns the current initialization status and identity information of the agent
+ *     tags: [Operations]
+ *     responses:
+ *       200:
+ *         description: Agent status retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 initialized:
+ *                   type: boolean
+ *                   description: Whether the agent has been initialized
+ *                 agentId:
+ *                   type: integer
+ *                   description: Agent ID (only present if initialized)
+ *                 domain:
+ *                   type: string
+ *                   description: Agent domain (only present if initialized)
+ *                 address:
+ *                   type: string
+ *                   description: Agent address (only present if initialized)
+ *                 message:
+ *                   type: string
+ *                   description: Status message (only present if not initialized)
+ */

@@ -32,7 +32,7 @@ async function main(): Promise<void> {
     startDepositListener();
 
     // Start agent loop (runs forever alongside Express)
-    await runAgentLoop();
+    // await runAgentLoop();
   } catch (error) {
     logError("Fatal error", error);
     process.exit(1);

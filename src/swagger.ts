@@ -546,6 +546,66 @@ which manages concentrated liquidity positions on Uniswap V4 pools using AI-driv
             },
           },
         },
+        AgentRunResult: {
+          type: "object",
+          properties: {
+            agentId: {
+              type: "integer",
+              description: "Agent ID that processed the deposits",
+            },
+            agentDomain: {
+              type: "string",
+              description: "Agent domain name",
+            },
+            agentAddress: {
+              type: "string",
+              description: "Agent wallet address",
+            },
+            pool: {
+              type: "object",
+              properties: {
+                tick: {
+                  type: "integer",
+                  description: "Current pool tick",
+                },
+                price: {
+                  type: "number",
+                  description: "Current pool price",
+                },
+                liquidity: {
+                  type: "string",
+                  description: "Current pool liquidity",
+                },
+              },
+            },
+            depositsProcessed: {
+              type: "integer",
+              description: "Number of deposits processed",
+            },
+            depositResults: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  depositId: {
+                    type: "integer",
+                  },
+                  status: {
+                    type: "string",
+                    enum: ["processed", "skipped", "error"],
+                  },
+                  message: {
+                    type: "string",
+                  },
+                },
+              },
+            },
+            timestamp: {
+              type: "integer",
+              description: "Unix timestamp of the run",
+            },
+          },
+        },
       },
     },
   },

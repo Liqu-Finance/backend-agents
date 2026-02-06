@@ -15,6 +15,7 @@ import { STRATEGY_MAP, StrategyName } from "./types";
 import { log, logError } from "./logger";
 import { getRecentDeposits } from "./event-listener";
 import { setupSwagger } from "./swagger";
+import { runAgentOnce, getAgentInfo } from "./agent";
 
 // BigInt-safe JSON serializer
 function serialize(obj: unknown): unknown {
@@ -398,4 +399,31 @@ app.post("/api/rebalance/:depositId", async (req, res) => {
 
 app.get("/api/deposits/recent", (_req, res) => {
   res.json({ deposits: getRecentDeposits() });
+});
+
+// ─── Agent Run (Demo Mode) ──────────────────────
+
+app.post("/api/agent/run", async (_req, res) => {
+  try {
+    log("AGENT", "Manual agent run triggered via API");
+    const result = await runAgentOnce();
+    res.json(serialize(result));
+  } catch (error) {
+    logError("POST /api/agent/run failed", error);
+    res.status(500).json({ error: "Failed to run agent" });
+  }
+});
+
+app.get("/api/agent/status", (_req, res) => {
+  const info = getAgentInfo();
+  if (!info) {
+    res.json({ initialized: false, message: "Agent not initialized yet" });
+    return;
+  }
+  res.json({
+    initialized: true,
+    agentId: info.agentId,
+    domain: info.domain,
+    address: info.address,
+  });
 });

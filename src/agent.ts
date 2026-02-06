@@ -128,6 +128,95 @@ export async function processDeposit(depositId: number): Promise<void> {
   }
 }
 
+// Initialize the agent identity (call once on startup)
+export async function initAgent(): Promise<AgentInfo> {
+  if (!agentInfo) {
+    agentInfo = await getMyAgentInfo();
+    log("AGENT", `Agent initialized: ${agentInfo.domain} (id=${agentInfo.agentId})`);
+    log("AGENT", `Address: ${agentInfo.address}`);
+  }
+  return agentInfo;
+}
+
+// Result of a single agent run
+export interface AgentRunResult {
+  agentId: number;
+  agentDomain: string;
+  agentAddress: string;
+  pool: {
+    tick: number;
+    price: number;
+    liquidity: string;
+  };
+  depositsProcessed: number;
+  depositResults: {
+    depositId: number;
+    status: "processed" | "skipped" | "error";
+    message: string;
+  }[];
+  timestamp: number;
+}
+
+// Run agent logic once (for demo/API usage)
+export async function runAgentOnce(): Promise<AgentRunResult> {
+  // 1. Verify our identity on-chain
+  const info = await initAgent();
+  log("AGENT", `Running agent once: ${info.domain} (id=${info.agentId})`);
+
+  const depositResults: AgentRunResult["depositResults"] = [];
+
+  try {
+    // 2. Read pool state
+    const poolState = await getPoolState();
+    const currentPrice = tickToPrice(poolState.tick);
+
+    log("POOL", `tick=${poolState.tick}, price=${currentPrice.toFixed(2)} USDT/WETH`);
+    log("POOL", `liquidity=${poolState.liquidity.toString()}`);
+
+    // 3. Find deposits assigned to us
+    const myDeposits = await getMyAssignedDeposits(agentWallet.address);
+    log("AGENT", `Managing ${myDeposits.length} deposit(s)`);
+
+    for (const depositId of myDeposits) {
+      try {
+        await processDeposit(depositId);
+        depositResults.push({
+          depositId,
+          status: "processed",
+          message: `Deposit #${depositId} processed successfully`,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logError(`Failed to process deposit #${depositId}`, error);
+        depositResults.push({
+          depositId,
+          status: "error",
+          message: errorMessage,
+        });
+      }
+    }
+
+    log("AGENT", `Agent run complete. Processed ${myDeposits.length} deposit(s).`);
+
+    return {
+      agentId: info.agentId,
+      agentDomain: info.domain,
+      agentAddress: info.address,
+      pool: {
+        tick: poolState.tick,
+        price: currentPrice,
+        liquidity: poolState.liquidity.toString(),
+      },
+      depositsProcessed: myDeposits.length,
+      depositResults,
+      timestamp: Date.now(),
+    };
+  } catch (error) {
+    logError("Agent run error", error);
+    throw error;
+  }
+}
+
 export async function runAgentLoop(): Promise<void> {
   // 1. Verify our identity on-chain
   agentInfo = await getMyAgentInfo();
