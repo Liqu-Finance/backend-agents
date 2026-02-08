@@ -5,157 +5,81 @@
 ![Liqu Finance](https://img.shields.io/badge/Liqu-Finance-6366f1?style=for-the-badge&logo=ethereum&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)
 ![Unichain](https://img.shields.io/badge/Unichain-Sepolia-FF6B6B?style=for-the-badge)
-![Gemini AI](https://img.shields.io/badge/Gemini-AI-4285F4?style=for-the-badge&logo=google&logoColor=white)
 
-**AI-Powered Concentrated Liquidity Management Agent**
-
-Autonomous on-chain liquidity management powered by Gemini AI for Uniswap V4 CLMM pools.
-
-[Features](#features) • [Architecture](#architecture) • [Getting Started](#getting-started) • [API Reference](#api-reference) • [ERC-8004](#erc-8004-integration)
+**AI-Powered Concentrated Liquidity Management Agent for Uniswap V4**
 
 </div>
 
 ---
 
-## 🎯 Overview
+## Overview
 
-The **Liqu Finance Backend Agent** is an autonomous AI agent that manages concentrated liquidity positions on Uniswap V4 pools. It leverages Google's Gemini AI to analyze pool conditions and make intelligent decisions about minting, rebalancing, or closing liquidity positions based on configurable risk strategies.
+Autonomous agent that manages USDT/WETH concentrated liquidity positions on Uniswap V4 (Unichain Sepolia). Uses AI to analyze pool state and automatically mint, rebalance, or close positions based on configurable risk strategies.
 
-### Key Highlights
+**Key Features:**
 
-- 🤖 **AI-Driven Decisions**: Uses Gemini 2.5 Flash for real-time pool analysis
-- ⛓️ **ERC-8004 Compliant**: Implements decentralized AI agent identity & reputation standards
-- 🔄 **Automated Rebalancing**: Continuously monitors and adjusts position ranges
-- 📊 **Multiple Strategies**: Conservative, Balanced, and Degen risk profiles
-- 🌐 **RESTful API**: Complete HTTP interface for frontend integration
+- AI-powered position analysis (OpenAI, Gemini, or Kimi)
+- Three risk strategies: Conservative, Balanced, Degen
+- Automatic fallback to rule-based decisions when AI is unavailable
+- ERC-8004 on-chain identity and reputation tracking
+- REST API with Swagger documentation
 
----
-
-## ✨ Features
-
-### AI Pool Analysis
-
-The agent uses Gemini AI to analyze real-time pool metrics including:
-
-- Current tick and price
-- Liquidity distribution
-- Fee growth rates
-- Position health
-
-### Risk Strategies
-
-| Strategy         | Tick Range  | Slippage | Rebalance Threshold | Description                                  |
-| ---------------- | ----------- | -------- | ------------------- | -------------------------------------------- |
-| **CONSERVATIVE** | ±120 ticks  | 0.5%     | 70%                 | Narrow range, low risk, frequent rebalancing |
-| **BALANCED**     | ±600 ticks  | 1.0%     | 85%                 | Medium range, moderate risk                  |
-| **DEGEN**        | ±3000 ticks | 3.0%     | 95%                 | Wide range, high yield potential             |
-
-### Autonomous Operations
-
-- **Position Minting**: Opens new concentrated liquidity positions
-- **Position Closing**: Removes liquidity and collects fees
-- **Rebalancing**: Closes out-of-range positions and re-mints with optimal tick range
-- **Event Listening**: Monitors on-chain events for new deposits and agent assignments
+📚 **Live API Docs:** [https://backend-agent-seven.vercel.app/api-docs](https://backend-agent-seven.vercel.app/api-docs)
 
 ---
 
-## 🏗️ Architecture
+## How It Works
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Frontend (React)                          │
-└─────────────────────────────┬───────────────────────────────────┘
-                              │ HTTP API
-┌─────────────────────────────▼───────────────────────────────────┐
-│                      Backend Agent (Node.js)                      │
-│  ┌─────────────┐  ┌──────────────┐  ┌────────────────────────┐   │
-│  │   API (Express)│  │ Gemini AI    │  │    Agent Loop         │   │
-│  │   - /pool     │  │ Analyzer     │  │   - Process deposits   │   │
-│  │   - /deposits │  └──────┬───────┘  │   - Execute decisions  │   │
-│  │   - /agents   │         │          └───────────┬────────────┘   │
-│  │   - /analyze  │◄────────┘                      │               │
-│  └───────┬───────┘                                │               │
-│          │                                        │               │
-│  ┌───────▼────────────────────────────────────────▼──────────┐   │
-│  │                 Smart Contract Services                     │   │
-│  │  ┌─────────────┐  ┌────────────┐  ┌──────────────────────┐   │
-│  │  │ Pool Reader │  │ TX Executor│  │  ERC-8004 Services   │   │
-│  │  │  - State    │  │  - Mint    │  │   - Identity         │   │
-│  │  │  - Deposits │  │  - Close   │  │   - Reputation       │   │
-│  │  │  - Positions│  │  - Rebal   │  │   - Validation       │   │
-│  │  └─────────────┘  └────────────┘  └──────────────────────┘   │
-│  └─────────────────────────────────────────────────────────────┘ │
-└───────────────────────────────┬─────────────────────────────────┘
-                                │ ethers.js / JSON-RPC
-┌───────────────────────────────▼─────────────────────────────────┐
-│                    Unichain Sepolia (Chain 1301)                  │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐   │
-│  │ CLMMLiquidity   │  │ CLMM Router     │  │ ERC-8004        │   │
-│  │ Agent Contract  │  │                 │  │ Registries      │   │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
+User Deposit → Agent Polls → AI Analysis → Execute Transaction
+                                  ↓
+                         ERC-8004 Validation
 ```
 
-### Module Breakdown
-
-| Module               | Description                                               |
-| -------------------- | --------------------------------------------------------- |
-| `index.ts`           | Application entry point, starts API server and agent loop |
-| `api.ts`             | Express REST API endpoints                                |
-| `agent.ts`           | Core agent logic for deposit processing                   |
-| `config.ts`          | Configuration, contract instances, strategy configs       |
-| `pool-reader.ts`     | Pool state and position data retrieval                    |
-| `tx-executor.ts`     | On-chain transaction execution (mint, close, rebalance)   |
-| `gemini-analyzer.ts` | Gemini AI integration for pool analysis                   |
-| `erc8004-service.ts` | ERC-8004 identity, reputation, validation services        |
-| `event-listener.ts`  | On-chain event polling for deposits and assignments       |
-| `types.ts`           | TypeScript type definitions                               |
-| `logger.ts`          | Structured logging utilities                              |
+1. User deposits tokens via smart contract and assigns to an agent
+2. Agent detects the deposit and reads pool state
+3. AI analyzes current tick, price, and liquidity to recommend action
+4. Agent executes MINT/REBALANCE/CLOSE on-chain
+5. Transaction hashes returned for tracking
 
 ---
 
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Node.js 18+
-- npm or yarn
-- A funded wallet on Unichain Sepolia
-- Gemini API key
-
-### Installation
+## Quick Start
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-repo/liqu-finance.git
-cd liqu-finance/backend-agent
-
-# Install dependencies
+# Install
 npm install
-```
 
-### Configuration
-
-1. Copy the example environment file:
-
-```bash
+# Configure
 cp .env.example .env
+# Set: RPC_URL, AGENT_PRIVATE_KEY, LLM keys, contract addresses
+
+# Run
+npm start
 ```
 
-2. Configure your `.env` file:
+Server runs on `http://localhost:3001`. API docs at `/api-docs`.
+
+---
+
+## Environment Variables
 
 ```env
-# Unichain Sepolia
+# Network
 RPC_URL=https://sepolia.unichain.org
 CHAIN_ID=1301
+AGENT_PRIVATE_KEY=<your-private-key>
 
-# Agent private key (use one of the registered agent keys)
-AGENT_PRIVATE_KEY=your_private_key_here
+# LLM Provider: "openai", "gemini", or "kimi"
+LLM_PROVIDER=openai
 
-# Gemini API Key
-GEMINI_API_KEY=your_gemini_api_key
+# API Keys (based on provider)
+OPENAI_API_KEY=<key>
+GEMINI_API_KEY=<key>
+KIMI_API_KEY=<key>
+KIMI_MODEL=kimi-k2.5
 
-# Contract addresses (pre-deployed on Unichain Sepolia)
+# Contracts
 CLMM_LIQUIDITY_AGENT=0xC2de233c348c1631a7F75bb7A4A640bc411a0C70
 CLMM_ROUTER=0x11A74D375951D27a3E159a7B6CFfaa7B2A2cbC36
 IDENTITY_REGISTRY=0x6F9E056e8ec94C81736823692C748566E36e6D8F
@@ -163,162 +87,118 @@ REPUTATION_REGISTRY=0xE7ec67588178B493938a88611999A5609222A2EC
 VALIDATION_REGISTRY=0xB650bC862C3cB90adEC758C3101562099e71e176
 ```
 
-### Running the Agent
+---
 
-```bash
-# Development
-npm start
+## API Endpoints
 
-# Build for production
-npm run build
-```
+> **💡 Production Note:** In production, you only need to call `POST /api/agent/run`. The agent automatically handles everything:
+>
+> - Detects all assigned deposits
+> - Checks if positions are out of range
+> - Auto-rebalances when price moves outside tick range
+> - Mints new positions for deposits without any
+>
+> The `/run/:depositId`, `/close/:depositId`, and `/rebalance/:depositId` endpoints are for manual control and testing only.
 
-The agent will:
+### Agent Operations
 
-1. Start the Express API server on port 3001 (configurable via `PORT` env)
-2. Begin polling for new deposit events
-3. Start the main agent loop processing assigned deposits
+| Method | Endpoint                      | Description                                       |
+| ------ | ----------------------------- | ------------------------------------------------- |
+| POST   | `/api/agent/run`              | **[Primary]** Run agent for all assigned deposits |
+| POST   | `/api/agent/run/:depositId`   | Run agent for specific deposit (manual)           |
+| POST   | `/api/agent/close/:depositId` | Close all positions for a deposit (manual)        |
+| GET    | `/api/agent/status`           | Get agent initialization status                   |
+
+### Pool & Deposits
+
+| Method | Endpoint                       | Description                                 |
+| ------ | ------------------------------ | ------------------------------------------- |
+| GET    | `/api/pool/state`              | Current pool state (tick, price, liquidity) |
+| GET    | `/api/deposits/:id`            | Deposit details by ID                       |
+| GET    | `/api/deposits/user/:address`  | User's deposit IDs                          |
+| GET    | `/api/deposits/agent/:address` | Deposits assigned to agent                  |
+| GET    | `/api/positions/:tokenId`      | Position details                            |
+
+### Analysis & Strategy
+
+| Method | Endpoint                    | Description                   |
+| ------ | --------------------------- | ----------------------------- |
+| POST   | `/api/analyze`              | AI pool analysis for strategy |
+| GET    | `/api/strategies`           | All strategy configurations   |
+| POST   | `/api/rebalance/:depositId` | Trigger rebalance             |
+
+### ERC-8004 (Identity & Reputation)
+
+| Method | Endpoint                     | Description             |
+| ------ | ---------------------------- | ----------------------- |
+| GET    | `/api/agents/count`          | Total registered agents |
+| GET    | `/api/agents/:id`            | Agent by ID             |
+| GET    | `/api/agents/:id/reputation` | Agent reputation score  |
+| GET    | `/api/validation/:dataHash`  | Validation status       |
 
 ---
 
-## 📡 API Reference
-
-The backend agent exposes a RESTful API for frontend integration. Full Swagger documentation is available at `/api-docs` when running the server.
-
-### Pool Endpoints
-
-| Method | Endpoint          | Description                                     |
-| ------ | ----------------- | ----------------------------------------------- |
-| GET    | `/api/pool/state` | Get current pool state (tick, price, liquidity) |
-
-### Deposit Endpoints
-
-| Method | Endpoint                       | Description                             |
-| ------ | ------------------------------ | --------------------------------------- |
-| GET    | `/api/deposits/user/:address`  | Get deposit IDs for a user              |
-| GET    | `/api/deposits/agent/:address` | Get deposits assigned to an agent       |
-| GET    | `/api/deposits/:id`            | Get deposit details by ID               |
-| GET    | `/api/deposits/:id/positions`  | Get positions for a deposit             |
-| GET    | `/api/deposits/recent`         | Get recent deposits from event listener |
-
-### Position Endpoints
-
-| Method | Endpoint                  | Description                      |
-| ------ | ------------------------- | -------------------------------- |
-| GET    | `/api/positions/:tokenId` | Get position details by token ID |
-
-### Agent Endpoints (ERC-8004)
-
-| Method | Endpoint                       | Description                      |
-| ------ | ------------------------------ | -------------------------------- |
-| GET    | `/api/agents/count`            | Get total registered agent count |
-| GET    | `/api/agents/all`              | List all registered agents       |
-| GET    | `/api/agents/:id`              | Get agent by ID                  |
-| GET    | `/api/agents/address/:address` | Resolve agent by address         |
-| GET    | `/api/agents/:id/reputation`   | Get agent reputation score       |
-
-### Validation Endpoints
-
-| Method | Endpoint                    | Description                        |
-| ------ | --------------------------- | ---------------------------------- |
-| GET    | `/api/validation/:dataHash` | Get validation status by data hash |
-
-### Strategy & Analysis Endpoints
-
-| Method | Endpoint                    | Description                             |
-| ------ | --------------------------- | --------------------------------------- |
-| GET    | `/api/strategies`           | Get all strategy configurations         |
-| POST   | `/api/analyze`              | AI-powered pool analysis for a strategy |
-| GET    | `/api/assign/:depositId`    | Get recommended agent for a deposit     |
-| POST   | `/api/rebalance/:depositId` | Trigger rebalance for a deposit         |
-
-### Example: Analyze Pool
+## Example: Run Agent for Deposit
 
 ```bash
-curl -X POST http://localhost:3001/api/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"strategy": "BALANCED"}'
+curl -X POST http://localhost:3001/api/agent/run/1
 ```
 
 **Response:**
 
 ```json
 {
-  "strategy": "BALANCED",
-  "strategyConfig": {
-    "tickRangeMultiplier": 10,
-    "maxSlippage": 0.01,
-    "rebalanceThreshold": 0.85,
-    "description": "Medium range, moderate risk"
-  },
+  "agentId": 1,
+  "agentDomain": "conservative.liqu.finance",
+  "depositId": 1,
   "pool": {
-    "tick": -201600,
+    "tick": -62147,
     "price": 2453.21,
-    "liquidity": "123456789012345678"
+    "liquidity": "2727525614538322453050"
   },
-  "recommendation": {
-    "action": "MINT",
-    "tickLower": -202200,
-    "tickUpper": -201000,
-    "reason": "Current price is in a stable range. Recommended to mint a position with a ±600 tick range for optimal fee capture.",
-    "confidence": 85
-  },
-  "agentAddress": "0x6c52aAD1Cbb66C0f666b62b36261d2f2205A8607"
+  "status": "processed",
+  "action": "MINT",
+  "tickLower": -62220,
+  "tickUpper": -62100,
+  "confidence": 85,
+  "txHashes": ["0xabc123..."],
+  "message": "Deposit #1 processed successfully"
+}
+```
+
+## Example: Close Positions
+
+```bash
+curl -X POST http://localhost:3001/api/agent/close/1
+```
+
+**Response:**
+
+```json
+{
+  "agentId": 1,
+  "depositId": 1,
+  "status": "success",
+  "positionsClosed": 2,
+  "closedTokenIds": [12345, 12346],
+  "txHashes": ["0xabc...", "0xdef..."],
+  "message": "Successfully closed 2 position(s)"
 }
 ```
 
 ---
 
-## 🔗 ERC-8004 Integration
+## Strategies
 
-This agent implements the **ERC-8004** standard for decentralized AI agent identity and reputation.
-
-### Identity Registry
-
-- Agents are registered with a unique ID and domain name
-- Identity can be resolved by address or ID
-- Agent registration verified before processing deposits
-
-### Reputation System
-
-- Tracks validation history and response rates
-- Computes reputation score (0-100) based on:
-  - Average validation scores (60% weight)
-  - Response rate (20% weight)
-  - Trust authorizations (20% weight)
-
-### Validation Framework
-
-- Requests validation before executing decisions
-- Submits validation responses with confidence scores
-- On-chain and in-memory validation tracking
+| Strategy     | Tick Range  | Risk Level | Description                        |
+| ------------ | ----------- | ---------- | ---------------------------------- |
+| CONSERVATIVE | ±120 ticks  | Low        | Narrow range, frequent rebalancing |
+| BALANCED     | ±600 ticks  | Medium     | Moderate range, balanced approach  |
+| DEGEN        | ±3000 ticks | High       | Wide range, maximum fee capture    |
 
 ---
 
-## 📦 Smart Contracts
-
-### Deployed Contracts (Unichain Sepolia)
-
-| Contract             | Address                                      |
-| -------------------- | -------------------------------------------- |
-| CLMM Liquidity Agent | `0xC2de233c348c1631a7F75bb7A4A640bc411a0C70` |
-| CLMM Router          | `0x11A74D375951D27a3E159a7B6CFfaa7B2A2cbC36` |
-| Identity Registry    | `0x6F9E056e8ec94C81736823692C748566E36e6D8F` |
-| Reputation Registry  | `0xE7ec67588178B493938a88611999A5609222A2EC` |
-| Validation Registry  | `0xB650bC862C3cB90adEC758C3101562099e71e176` |
-
-### Pool Configuration
-
-| Parameter     | Value                                        |
-| ------------- | -------------------------------------------- |
-| Token0 (USDT) | `0x4dABf45C8cF333Ef1e874c3FDFC3C86799af80c8` |
-| Token1 (WETH) | `0xf96c5C189a949C73745a277A4Acf071B1B9f6DF5` |
-| Fee           | 0.3% (3000)                                  |
-| Tick Spacing  | 60                                           |
-
----
-
-## 🤖 Registered Agents
+## Registered Agents (Unichain Sepolia)
 
 | Strategy     | Address                                      |
 | ------------ | -------------------------------------------- |
@@ -328,18 +208,18 @@ This agent implements the **ERC-8004** standard for decentralized AI agent ident
 
 ---
 
-## 📝 License
+## Fallback Mode
 
-ISC License
+When AI is unavailable (API error, rate limit), the agent automatically falls back to rule-based decisions:
 
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+- No positions → MINT with strategy-configured tick range
+- Position out of range → REBALANCE
+- Position in range → HOLD
 
 ---
 
 <div align="center">
-Built with ❤️ for the Hackathon
+
+**Built for ETH Global Hackathon 2026**
+
 </div>
