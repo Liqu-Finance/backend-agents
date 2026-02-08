@@ -8,9 +8,10 @@ import {
   getMyAssignedDeposits,
   tickToPrice,
 } from "./pool-reader";
-import { getTotalAgents, getValidationStatus, getAgentReputation } from "./erc8004-service";
+import { getTotalAgents, getValidationStatus, getAgentReputation, requestValidation, submitValidationResponse } from "./erc8004-service";
 import { analyzePoolWithGemini } from "./gemini-analyzer";
 import { executeRebalance } from "./tx-executor";
+import { initAgent } from "./agent";
 import { STRATEGY_MAP, StrategyName } from "./types";
 import { log, logError } from "./logger";
 import { getRecentDeposits } from "./event-listener";
@@ -362,8 +363,30 @@ app.post("/api/rebalance/:depositId", async (req, res) => {
       return;
     }
 
+    // ERC-8004 validation: request before executing
+    const agentInfo = await initAgent();
+    let validationHash: string | null = null;
+    try {
+      validationHash = await requestValidation(
+        agentInfo.agentId,
+        agentInfo.agentId,
+        { depositId, action: "REBALANCE", tickLower: decision.tickLower, tickUpper: decision.tickUpper, timestamp: Date.now() }
+      );
+    } catch (err) {
+      logError("Validation request failed during rebalance", err);
+    }
+
     // Execute: close all existing → mint new position
-    const newTokenId = await executeRebalance(depositId, decision.tickLower, decision.tickUpper);
+    const rebalanceResult = await executeRebalance(depositId, decision.tickLower, decision.tickUpper);
+
+    // ERC-8004 validation: submit response after execution
+    if (validationHash) {
+      try {
+        await submitValidationResponse(validationHash, Math.min(decision.confidence, 100));
+      } catch (err) {
+        logError("Validation response failed during rebalance", err);
+      }
+    }
 
     // Re-read deposit for updated state
     const updatedDeposit = await getDepositInfo(depositId);
@@ -374,13 +397,19 @@ app.post("/api/rebalance/:depositId", async (req, res) => {
         strategy: strategyName,
         action: "REBALANCE",
         previousPositions: deposit.positionTokenIds,
-        newPosition: newTokenId ?? null,
+        newPosition: rebalanceResult.newTokenId ?? null,
         newTickLower: decision.tickLower,
         newTickUpper: decision.tickUpper,
         reason: decision.reason,
+        confidence: decision.confidence,
         pool: {
           tick: poolState.tick,
           price: currentPrice,
+        },
+        transactions: {
+          close: rebalanceResult.closeTxHashes,
+          mint: rebalanceResult.mintResult,
+          validationHash,
         },
         updatedDeposit: {
           amount0Remaining: updatedDeposit.amount0Remaining,

@@ -3,6 +3,27 @@ import { getDepositInfo, getPoolState } from "./pool-reader";
 import { PositionDecision } from "./types";
 import { log, logError } from "./logger";
 
+// ─── Result types (tx hashes for frontend) ──────────────────────
+
+export interface MintResult {
+  tokenId: number | undefined;
+  txHash: string;
+  liquidity: string;
+  amount0: string;
+  amount1: string;
+}
+
+export interface CloseResult {
+  tokenId: number;
+  txHash: string;
+}
+
+export interface RebalanceResult {
+  closeTxHashes: CloseResult[];
+  mintResult: MintResult | null;
+  newTokenId: number | undefined;
+}
+
 // Track minted tick ranges in-memory (router contract doesn't return them)
 const positionTickCache = new Map<number, { tickLower: number; tickUpper: number }>();
 
@@ -88,7 +109,7 @@ export async function executeMintPosition(
   tickUpper: number,
   amount0Max: bigint,
   amount1Max: bigint,
-): Promise<number | undefined> {
+): Promise<MintResult | undefined> {
   const deadline = Math.floor(Date.now() / 1000) + 300;
 
   // Calculate optimal liquidity from available amounts and current pool price
@@ -116,9 +137,11 @@ export async function executeMintPosition(
   const tx = await contracts.agent.agentMintPosition(depositId, tickLower, tickUpper, liquidity, amount0Max, amount1Max, deadline);
 
   const receipt = await tx.wait();
-  log("TX", `Minted! txHash=${receipt.hash}`);
+  const txHash = receipt.hash;
+  log("TX", `Minted! txHash=${txHash}`);
 
   // Parse PositionCreated event
+  let tokenId: number | undefined;
   const iface = contracts.agent.interface;
   for (const txLog of receipt.logs) {
     try {
@@ -127,20 +150,26 @@ export async function executeMintPosition(
         data: txLog.data,
       });
       if (parsed?.name === "PositionCreated") {
-        const tokenId = Number(parsed.args.tokenId);
+        tokenId = Number(parsed.args.tokenId);
         log("TX", `Position tokenId=${tokenId}`);
-        // Cache the tick range
         positionTickCache.set(tokenId, { tickLower, tickUpper });
-        return tokenId;
+        break;
       }
     } catch {
       // Not our event, skip
     }
   }
-  return undefined;
+
+  return {
+    tokenId,
+    txHash,
+    liquidity: liquidity.toString(),
+    amount0: amount0Max.toString(),
+    amount1: amount1Max.toString(),
+  };
 }
 
-export async function executeClosePosition(depositId: number, tokenId: number): Promise<void> {
+export async function executeClosePosition(depositId: number, tokenId: number): Promise<CloseResult> {
   const deadline = Math.floor(Date.now() / 1000) + 300;
 
   log("TX", `Closing position tokenId=${tokenId} for deposit ${depositId}`);
@@ -148,17 +177,22 @@ export async function executeClosePosition(depositId: number, tokenId: number): 
   const tx = await contracts.agent.agentClosePosition(depositId, tokenId, 0, 0, deadline);
 
   const receipt = await tx.wait();
-  log("TX", `Closed! txHash=${receipt.hash}`);
+  const txHash = receipt.hash;
+  log("TX", `Closed! txHash=${txHash}`);
 
   // Remove from cache
   positionTickCache.delete(tokenId);
+
+  return { tokenId, txHash };
 }
 
 export async function executeRebalance(
   depositId: number,
   newTickLower: number,
   newTickUpper: number,
-): Promise<number | undefined> {
+): Promise<RebalanceResult> {
+  const closeTxHashes: CloseResult[] = [];
+
   // Step 1: Close all existing positions
   let deposit = await getDepositInfo(depositId);
 
@@ -167,7 +201,8 @@ export async function executeRebalance(
   } else {
     log("REBALANCE", `Closing ${deposit.positionTokenIds.length} position(s) for deposit #${depositId}...`);
     for (const tokenId of deposit.positionTokenIds) {
-      await executeClosePosition(depositId, tokenId);
+      const closeResult = await executeClosePosition(depositId, tokenId);
+      closeTxHashes.push(closeResult);
     }
     log("REBALANCE", `All positions closed. Tokens returned to deposit.`);
   }
@@ -179,20 +214,24 @@ export async function executeRebalance(
 
   if (amount0Max === 0n && amount1Max === 0n) {
     log("REBALANCE", "No remaining balance after close, cannot re-mint");
-    return undefined;
+    return { closeTxHashes, mintResult: null, newTokenId: undefined };
   }
 
   log("REBALANCE", `Re-minting with new range: tickLower=${newTickLower}, tickUpper=${newTickUpper}`);
   log("REBALANCE", `  amount0=${amount0Max.toString()}, amount1=${amount1Max.toString()}`);
 
   // Step 3: Mint new position with new tick range
-  const tokenId = await executeMintPosition(depositId, newTickLower, newTickUpper, amount0Max, amount1Max);
+  const mintResult = await executeMintPosition(depositId, newTickLower, newTickUpper, amount0Max, amount1Max);
 
-  if (tokenId) {
-    log("REBALANCE", `Rebalance complete! New position tokenId=${tokenId}`);
+  if (mintResult?.tokenId) {
+    log("REBALANCE", `Rebalance complete! New position tokenId=${mintResult.tokenId}`);
   }
 
-  return tokenId;
+  return {
+    closeTxHashes,
+    mintResult: mintResult ?? null,
+    newTokenId: mintResult?.tokenId,
+  };
 }
 
 export async function executeDecision(depositId: number, decision: PositionDecision): Promise<void> {

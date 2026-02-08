@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { contracts, agentWallet } from "./config";
+import { contracts, agentWallet, provider } from "./config";
 import { AgentInfo } from "./types";
 import { log, logError } from "./logger";
 
@@ -140,6 +140,36 @@ export async function getValidationStatus(
 }
 
 // ─────────────────────────────────────────────
+//  BATCHED EVENT QUERY (Unichain Sepolia max 10k blocks)
+// ─────────────────────────────────────────────
+
+const BATCH_SIZE = 9_999;
+const LOOKBACK_BLOCKS = 50_000;
+
+async function queryFilterBatched(
+  contract: ethers.Contract,
+  filter: ethers.ContractEventName,
+  fromBlock: number,
+  toBlock: number,
+): Promise<ethers.EventLog[]> {
+  const allLogs: ethers.EventLog[] = [];
+  let start = fromBlock;
+
+  while (start <= toBlock) {
+    const end = Math.min(start + BATCH_SIZE, toBlock);
+    try {
+      const logs = await contract.queryFilter(filter, start, end);
+      allLogs.push(...(logs as ethers.EventLog[]));
+    } catch (err) {
+      logError(`queryFilter batch ${start}-${end} failed`, err);
+    }
+    start = end + 1;
+  }
+
+  return allLogs;
+}
+
+// ─────────────────────────────────────────────
 //  REPUTATION AGGREGATION — Compute agent reputation
 // ─────────────────────────────────────────────
 
@@ -164,17 +194,16 @@ export async function getAgentReputation(agentId: number): Promise<AgentReputati
   const info = await contracts.identity.getAgent(agentId);
   const totalAgents = await getTotalAgents();
 
-  // ── Validation history from in-memory store ──
-  const agentValidations = validationStore.filter((r) => r.agentId === agentId);
-
-  // Also try on-chain queryFilter as supplement (may fail on Unichain Sepolia)
+  // Query on-chain events in batches (Unichain Sepolia max 10k blocks per request)
   try {
+    const currentBlock = await provider.getBlockNumber();
+    const fromBlock = Math.max(0, currentBlock - LOOKBACK_BLOCKS);
     const requestFilter = contracts.validation.filters.ValidationRequestEvent(null, agentId);
     const responseFilter = contracts.validation.filters.ValidationResponseEvent(null, agentId);
 
     const [requestLogs, responseLogs] = await Promise.all([
-      contracts.validation.queryFilter(requestFilter),
-      contracts.validation.queryFilter(responseFilter),
+      queryFilterBatched(contracts.validation, requestFilter, fromBlock, currentBlock),
+      queryFilterBatched(contracts.validation, responseFilter, fromBlock, currentBlock),
     ]);
 
     // Merge on-chain events into store (dedup by dataHash)
@@ -202,7 +231,7 @@ export async function getAgentReputation(agentId: number): Promise<AgentReputati
       });
     }
   } catch (err) {
-    logError("queryFilter failed (expected on Unichain Sepolia), using in-memory only", err);
+    logError("queryFilter batched scan failed, using in-memory only", err);
   }
 
   // Re-filter after potential merge
