@@ -573,6 +573,30 @@
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/AgentRunResult'
+ *             example:
+ *               agentId: 2
+ *               agentDomain: "liqu-balanced.agent"
+ *               agentAddress: "0x6c52aAD1Cbb66C0f666b62b36261d2f2205A8607"
+ *               pool:
+ *                 tick: -201600
+ *                 price: 2453.21
+ *                 liquidity: "123456789012345678"
+ *               depositsProcessed: 2
+ *               depositResults:
+ *                 - depositId: 1
+ *                   status: "processed"
+ *                   message: "Deposit #1 processed successfully"
+ *                   action: "MINT"
+ *                   tickLower: -202200
+ *                   tickUpper: -201000
+ *                   newTokenId: 12345
+ *                   txHash: "0xabc123..."
+ *                 - depositId: 3
+ *                   status: "processed"
+ *                   message: "Deposit #3 processed successfully"
+ *                   action: "HOLD"
+ *                   reason: "Position is still in range"
+ *               timestamp: 1707400000000
  *       500:
  *         description: Failed to run agent
  *         content:
@@ -611,4 +635,122 @@
  *                 message:
  *                   type: string
  *                   description: Status message (only present if not initialized)
+ */
+
+/**
+ * @swagger
+ * /api/agent/run/{depositId}:
+ *   post:
+ *     summary: Run agent for specific deposit
+ *     description: |
+ *       Triggers the agent to process a specific deposit by ID.
+ *       The agent will:
+ *       1. Verify the deposit is assigned to this agent
+ *       2. Read the current pool state
+ *       3. Analyze the deposit with AI
+ *       4. Execute any necessary actions (mint, rebalance, or hold)
+ *       5. Return the result
+ *     tags: [Operations]
+ *     parameters:
+ *       - in: path
+ *         name: depositId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Deposit ID to process
+ *         example: 1
+ *     responses:
+ *       200:
+ *         description: Single deposit run completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SingleDepositRunResult'
+ *             example:
+ *               agentId: 2
+ *               agentDomain: "liqu-balanced.agent"
+ *               agentAddress: "0x6c52aAD1Cbb66C0f666b62b36261d2f2205A8607"
+ *               depositId: 1
+ *               pool:
+ *                 tick: -201600
+ *                 price: 2453.21
+ *                 liquidity: "123456789012345678"
+ *               status: "processed"
+ *               action: "MINT"
+ *               tickLower: -202200
+ *               tickUpper: -201000
+ *               newTokenId: 12345
+ *               message: "Deposit #1 processed successfully"
+ *               timestamp: 1707400000000
+ *       400:
+ *         description: Invalid deposit ID
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Failed to run agent for deposit
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+
+/**
+ * @swagger
+ * /api/agent/close/{depositId}:
+ *   post:
+ *     summary: Close all positions for deposit
+ *     description: |
+ *       Closes all open positions for a specific deposit.
+ *       This will:
+ *       1. Verify the deposit is assigned to this agent
+ *       2. Close all active positions
+ *       3. Return tokens to the deposit balance
+ *       4. Return all transaction hashes
+ *     tags: [Operations]
+ *     parameters:
+ *       - in: path
+ *         name: depositId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Deposit ID to close positions for
+ *         example: 1
+ *     responses:
+ *       200:
+ *         description: Close positions completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ClosePositionsResult'
+ *             example:
+ *               agentId: 2
+ *               agentDomain: "liqu-balanced.agent"
+ *               agentAddress: "0x6c52aAD1Cbb66C0f666b62b36261d2f2205A8607"
+ *               depositId: 1
+ *               pool:
+ *                 tick: -201600
+ *                 price: 2453.21
+ *                 liquidity: "123456789012345678"
+ *               status: "success"
+ *               positionsClosed: 2
+ *               closedTokenIds: [12345, 12346]
+ *               txHashes:
+ *                 - "0xabc123def456789012345678901234567890123456789012345678901234567890"
+ *                 - "0xdef789abc123456789012345678901234567890123456789012345678901234567"
+ *               message: "Successfully closed 2 position(s) for deposit #1"
+ *               timestamp: 1707400000000
+ *       400:
+ *         description: Invalid deposit ID
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Failed to close positions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */

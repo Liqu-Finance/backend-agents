@@ -12,11 +12,9 @@ import {
 import { getTotalAgents, getValidationStatus, getAgentReputation, requestValidation, submitValidationResponse } from "../src/erc8004-service";
 import { analyzePoolWithGemini } from "../src/gemini-analyzer";
 import { executeRebalance } from "../src/tx-executor";
-import { initAgent } from "../src/agent";
+import { initAgent, runAgentOnce, runAgentForDeposit, closePositionsForDeposit, getAgentInfo } from "../src/agent";
 import { STRATEGY_MAP, StrategyName } from "../src/types";
 import { log, logError } from "../src/logger";
-import { runAgentOnce, getAgentInfo } from "../src/agent";
-import { setupSwagger } from "../src/swagger";
 
 // BigInt-safe JSON serializer
 function serialize(obj: unknown): unknown {
@@ -31,8 +29,195 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Setup Swagger documentation
-setupSwagger(app);
+// OpenAPI Spec for Swagger
+const openApiSpec = {
+  openapi: "3.0.0",
+  info: {
+    title: "Liqu Finance Backend Agent API",
+    version: "1.0.0",
+    description: "AI-Powered Concentrated Liquidity Management Agent API for Uniswap V4 CLMM pools on Unichain Sepolia."
+  },
+  servers: [{ url: "https://backend-agent-seven.vercel.app", description: "Production" }],
+  paths: {
+    "/api/health": { get: { summary: "Health check", tags: ["System"], responses: { 200: { description: "OK" } } } },
+    "/api/pool/state": { get: { summary: "Get current pool state", tags: ["Pool"], responses: { 200: { description: "Pool state" } } } },
+    "/api/deposits/user/{address}": { get: { summary: "Get deposits by user", tags: ["Deposits"], parameters: [{ name: "address", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Deposit IDs" } } } },
+    "/api/deposits/agent/{address}": { get: { summary: "Get deposits by agent", tags: ["Deposits"], parameters: [{ name: "address", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Deposit IDs" } } } },
+    "/api/deposits/{id}": { get: { summary: "Get deposit details", tags: ["Deposits"], parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }], responses: { 200: { description: "Deposit info" } } } },
+    "/api/deposits/{id}/positions": { get: { summary: "Get deposit positions", tags: ["Deposits"], parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }], responses: { 200: { description: "Position list" } } } },
+    "/api/positions/{tokenId}": { get: { summary: "Get position details", tags: ["Positions"], parameters: [{ name: "tokenId", in: "path", required: true, schema: { type: "integer" } }], responses: { 200: { description: "Position info" } } } },
+    "/api/agents/count": { get: { summary: "Get total agent count", tags: ["Agents"], responses: { 200: { description: "Agent count" } } } },
+    "/api/agents/all": { get: { summary: "List all agents", tags: ["Agents"], responses: { 200: { description: "Agent list" } } } },
+    "/api/agents/{id}": { get: { summary: "Get agent by ID", tags: ["Agents"], parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }], responses: { 200: { description: "Agent info" } } } },
+    "/api/agents/address/{address}": { get: { summary: "Resolve agent by address", tags: ["Agents"], parameters: [{ name: "address", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Agent info" } } } },
+    "/api/agents/{id}/reputation": { get: { summary: "Get agent reputation", tags: ["Agents"], parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }], responses: { 200: { description: "Reputation data" } } } },
+    "/api/validation/{dataHash}": { get: { summary: "Get validation status", tags: ["Validation"], parameters: [{ name: "dataHash", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Validation status" } } } },
+    "/api/strategies": { get: { summary: "Get all strategies", tags: ["Strategies"], responses: { 200: { description: "Strategy configs" } } } },
+    "/api/analyze": { post: { summary: "AI pool analysis", tags: ["Analysis"], requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { strategy: { type: "string", enum: ["CONSERVATIVE", "BALANCED", "DEGEN"] } } } } } }, responses: { 200: { description: "Analysis result" } } } },
+    "/api/assign/{depositId}": { get: { summary: "Get agent assignment", tags: ["Operations"], parameters: [{ name: "depositId", in: "path", required: true, schema: { type: "integer" } }], responses: { 200: { description: "Assignment info" } } } },
+    "/api/rebalance/{depositId}": { post: { summary: "Trigger rebalance", tags: ["Operations"], parameters: [{ name: "depositId", in: "path", required: true, schema: { type: "integer" } }], responses: { 200: { description: "Rebalance result" } } } },
+    "/api/agent/run": { 
+      post: { 
+        summary: "Run agent once (Demo)", 
+        tags: ["Operations"], 
+        description: "Triggers a single run of the agent logic to process all assigned deposits", 
+        responses: { 
+          200: { 
+            description: "Agent run result",
+            content: {
+              "application/json": {
+                example: {
+                  agentId: 2,
+                  agentDomain: "liqu-balanced.agent",
+                  agentAddress: "0x6c52aAD1Cbb66C0f666b62b36261d2f2205A8607",
+                  pool: {
+                    tick: -201600,
+                    price: 2453.21,
+                    liquidity: "123456789012345678"
+                  },
+                  depositsProcessed: 2,
+                  depositResults: [
+                    {
+                      depositId: 1,
+                      status: "processed",
+                      message: "Deposit #1 processed successfully",
+                      action: "MINT",
+                      tickLower: -202200,
+                      tickUpper: -201000,
+                      newTokenId: 12345,
+                      txHash: "0xabc123..."
+                    },
+                    {
+                      depositId: 3,
+                      status: "processed",
+                      message: "Deposit #3 processed successfully",
+                      action: "HOLD",
+                      reason: "Position is still in range"
+                    }
+                  ],
+                  timestamp: 1707400000000
+                }
+              }
+            }
+          } 
+        } 
+      } 
+    },
+    "/api/agent/run/{depositId}": {
+      post: {
+        summary: "Run agent for specific deposit",
+        tags: ["Operations"],
+        description: "Triggers the agent to process a specific deposit by ID",
+        parameters: [{ name: "depositId", in: "path", required: true, schema: { type: "integer" }, description: "Deposit ID to process" }],
+        responses: {
+          200: {
+            description: "Single deposit run result",
+            content: {
+              "application/json": {
+                example: {
+                  agentId: 2,
+                  agentDomain: "liqu-balanced.agent",
+                  agentAddress: "0x6c52aAD1Cbb66C0f666b62b36261d2f2205A8607",
+                  depositId: 1,
+                  pool: {
+                    tick: -201600,
+                    price: 2453.21,
+                    liquidity: "123456789012345678"
+                  },
+                  status: "processed",
+                  action: "MINT",
+                  tickLower: -202200,
+                  tickUpper: -201000,
+                  newTokenId: 12345,
+                  message: "Deposit #1 processed successfully",
+                  timestamp: 1707400000000
+                }
+              }
+            }
+          },
+          400: { description: "Invalid deposit ID" },
+          500: { description: "Failed to run agent for deposit" }
+        }
+      }
+    },
+    "/api/agent/close/{depositId}": {
+      post: {
+        summary: "Close all positions for deposit",
+        tags: ["Operations"],
+        description: "Closes all open positions for a specific deposit, returning tokens to the deposit balance",
+        parameters: [{ name: "depositId", in: "path", required: true, schema: { type: "integer" }, description: "Deposit ID to close positions for" }],
+        responses: {
+          200: {
+            description: "Close positions result",
+            content: {
+              "application/json": {
+                example: {
+                  agentId: 2,
+                  agentDomain: "liqu-balanced.agent",
+                  agentAddress: "0x6c52aAD1Cbb66C0f666b62b36261d2f2205A8607",
+                  depositId: 1,
+                  pool: {
+                    tick: -201600,
+                    price: 2453.21,
+                    liquidity: "123456789012345678"
+                  },
+                  status: "success",
+                  positionsClosed: 2,
+                  closedTokenIds: [12345, 12346],
+                  txHashes: [
+                    "0xabc123def456789...",
+                    "0xdef789abc123456..."
+                  ],
+                  message: "Successfully closed 2 position(s) for deposit #1",
+                  timestamp: 1707400000000
+                }
+              }
+            }
+          },
+          400: { description: "Invalid deposit ID" },
+          500: { description: "Failed to close positions" }
+        }
+      }
+    },
+    "/api/agent/status": { get: { summary: "Get agent status", tags: ["Operations"], responses: { 200: { description: "Agent status" } } } }
+  }
+};
+
+// Swagger UI HTML using CDN (Vercel compatible)
+const swaggerHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Liqu Finance API</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css">
+  <style>body { margin: 0; } .swagger-ui .topbar { display: none; }</style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
+  <script>
+    window.onload = function() {
+      SwaggerUIBundle({
+        url: '/api-docs.json',
+        dom_id: '#swagger-ui',
+        presets: [SwaggerUIBundle.presets.apis],
+        layout: "BaseLayout"
+      });
+    };
+  </script>
+</body>
+</html>`;
+
+// Swagger endpoints
+app.get("/api-docs", (_req, res) => {
+  res.setHeader("Content-Type", "text/html");
+  res.send(swaggerHtml);
+});
+
+app.get("/api-docs.json", (_req, res) => {
+  res.json(openApiSpec);
+});
 
 // ─── Health Check ────────────────────────────
 app.get("/api/health", (_req, res) => {
@@ -441,6 +626,46 @@ app.get("/api/agent/status", (_req, res) => {
     domain: info.domain,
     address: info.address,
   });
+});
+
+// ─── Agent Run for Specific Deposit ──────────────────────
+
+app.post("/api/agent/run/:depositId", async (req, res) => {
+  try {
+    const depositId = Number(req.params.depositId);
+    
+    if (isNaN(depositId) || depositId <= 0) {
+      res.status(400).json({ error: "Invalid deposit ID" });
+      return;
+    }
+
+    log("AGENT", `Manual agent run triggered for deposit #${depositId} via API`);
+    const result = await runAgentForDeposit(depositId);
+    res.json(serialize(result));
+  } catch (error) {
+    logError("POST /api/agent/run/:depositId failed", error);
+    res.status(500).json({ error: "Failed to run agent for deposit" });
+  }
+});
+
+// ─── Agent Close Positions ──────────────────────
+
+app.post("/api/agent/close/:depositId", async (req, res) => {
+  try {
+    const depositId = Number(req.params.depositId);
+    
+    if (isNaN(depositId) || depositId <= 0) {
+      res.status(400).json({ error: "Invalid deposit ID" });
+      return;
+    }
+
+    log("CLOSE", `Close positions triggered for deposit #${depositId} via API`);
+    const result = await closePositionsForDeposit(depositId);
+    res.json(serialize(result));
+  } catch (error) {
+    logError("POST /api/agent/close/:depositId failed", error);
+    res.status(500).json({ error: "Failed to close positions" });
+  }
 });
 
 // Export for Vercel

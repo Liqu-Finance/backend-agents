@@ -1,4 +1,4 @@
-type LogTag = "AGENT" | "POOL" | "GEMINI" | "TX" | "ERC-8004" | "ERROR" | "SKIP" | "HOLD" | "REBALANCE";
+type LogTag = "AGENT" | "POOL" | "GEMINI" | "TX" | "ERC-8004" | "ERROR" | "SKIP" | "HOLD" | "REBALANCE" | "CLOSE";
 
 function timestamp(): string {
   return new Date().toISOString();

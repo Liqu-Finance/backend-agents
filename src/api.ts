@@ -11,12 +11,11 @@ import {
 import { getTotalAgents, getValidationStatus, getAgentReputation, requestValidation, submitValidationResponse } from "./erc8004-service";
 import { analyzePoolWithGemini } from "./gemini-analyzer";
 import { executeRebalance } from "./tx-executor";
-import { initAgent } from "./agent";
+import { initAgent, runAgentOnce, runAgentForDeposit, closePositionsForDeposit, getAgentInfo } from "./agent";
 import { STRATEGY_MAP, StrategyName } from "./types";
 import { log, logError } from "./logger";
 import { getRecentDeposits } from "./event-listener";
 import { setupSwagger } from "./swagger";
-import { runAgentOnce, getAgentInfo } from "./agent";
 
 // BigInt-safe JSON serializer
 function serialize(obj: unknown): unknown {
@@ -455,4 +454,44 @@ app.get("/api/agent/status", (_req, res) => {
     domain: info.domain,
     address: info.address,
   });
+});
+
+// ─── Agent Run for Specific Deposit ──────────────────────
+
+app.post("/api/agent/run/:depositId", async (req, res) => {
+  try {
+    const depositId = Number(req.params.depositId);
+    
+    if (isNaN(depositId) || depositId <= 0) {
+      res.status(400).json({ error: "Invalid deposit ID" });
+      return;
+    }
+
+    log("AGENT", `Manual agent run triggered for deposit #${depositId} via API`);
+    const result = await runAgentForDeposit(depositId);
+    res.json(serialize(result));
+  } catch (error) {
+    logError("POST /api/agent/run/:depositId failed", error);
+    res.status(500).json({ error: "Failed to run agent for deposit" });
+  }
+});
+
+// ─── Agent Close Positions ──────────────────────
+
+app.post("/api/agent/close/:depositId", async (req, res) => {
+  try {
+    const depositId = Number(req.params.depositId);
+    
+    if (isNaN(depositId) || depositId <= 0) {
+      res.status(400).json({ error: "Invalid deposit ID" });
+      return;
+    }
+
+    log("CLOSE", `Close positions triggered for deposit #${depositId} via API`);
+    const result = await closePositionsForDeposit(depositId);
+    res.json(serialize(result));
+  } catch (error) {
+    logError("POST /api/agent/close/:depositId failed", error);
+    res.status(500).json({ error: "Failed to close positions" });
+  }
 });

@@ -234,8 +234,18 @@ export async function executeRebalance(
   };
 }
 
-export async function executeDecision(depositId: number, decision: PositionDecision): Promise<void> {
+// Execution result with all tx hashes
+export interface ExecutionResult {
+  action: string;
+  txHashes: string[];
+  newTokenId?: number;
+  tickLower?: number;
+  tickUpper?: number;
+}
+
+export async function executeDecision(depositId: number, decision: PositionDecision): Promise<ExecutionResult> {
   const deposit = await getDepositInfo(depositId);
+  const txHashes: string[] = [];
 
   if (decision.action === "MINT" && decision.tickLower != null && decision.tickUpper != null) {
     const amount0Max = deposit.amount0Remaining;
@@ -243,23 +253,57 @@ export async function executeDecision(depositId: number, decision: PositionDecis
 
     if (amount0Max === 0n && amount1Max === 0n) {
       log("SKIP", "No remaining balance to mint");
-      return;
+      return { action: "SKIP", txHashes: [], tickLower: decision.tickLower, tickUpper: decision.tickUpper };
     }
 
-    await executeMintPosition(depositId, decision.tickLower, decision.tickUpper, amount0Max, amount1Max);
+    const mintResult = await executeMintPosition(depositId, decision.tickLower, decision.tickUpper, amount0Max, amount1Max);
+    if (mintResult) {
+      txHashes.push(mintResult.txHash);
+      return { 
+        action: "MINT", 
+        txHashes, 
+        newTokenId: mintResult.tokenId,
+        tickLower: decision.tickLower,
+        tickUpper: decision.tickUpper 
+      };
+    }
+    return { action: "SKIP", txHashes: [], tickLower: decision.tickLower, tickUpper: decision.tickUpper };
   }
 
   if (decision.action === "CLOSE") {
     for (const tokenId of deposit.positionTokenIds) {
-      await executeClosePosition(depositId, tokenId);
+      const closeResult = await executeClosePosition(depositId, tokenId);
+      txHashes.push(closeResult.txHash);
     }
+    return { action: "CLOSE", txHashes };
   }
 
   if (decision.action === "REBALANCE" && decision.tickLower != null && decision.tickUpper != null) {
-    await executeRebalance(depositId, decision.tickLower, decision.tickUpper);
+    const rebalanceResult = await executeRebalance(depositId, decision.tickLower, decision.tickUpper);
+    
+    // Collect all tx hashes from close operations
+    for (const closeResult of rebalanceResult.closeTxHashes) {
+      txHashes.push(closeResult.txHash);
+    }
+    
+    // Add mint tx hash if present
+    if (rebalanceResult.mintResult) {
+      txHashes.push(rebalanceResult.mintResult.txHash);
+    }
+    
+    return { 
+      action: "REBALANCE", 
+      txHashes, 
+      newTokenId: rebalanceResult.newTokenId,
+      tickLower: decision.tickLower,
+      tickUpper: decision.tickUpper 
+    };
   }
 
   if (decision.action === "HOLD") {
     log("HOLD", decision.reason);
+    return { action: "HOLD", txHashes: [] };
   }
+
+  return { action: decision.action, txHashes: [] };
 }

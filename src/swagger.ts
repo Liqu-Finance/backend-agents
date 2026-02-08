@@ -678,6 +678,151 @@ which manages concentrated liquidity positions on Uniswap V4 pools using AI-driv
             },
           },
         },
+        SingleDepositRunResult: {
+          type: "object",
+          properties: {
+            agentId: {
+              type: "integer",
+              description: "Agent ID that processed the deposit",
+            },
+            agentDomain: {
+              type: "string",
+              description: "Agent domain name",
+            },
+            agentAddress: {
+              type: "string",
+              description: "Agent wallet address",
+            },
+            depositId: {
+              type: "integer",
+              description: "Deposit ID that was processed",
+            },
+            pool: {
+              type: "object",
+              properties: {
+                tick: {
+                  type: "integer",
+                  description: "Current pool tick",
+                },
+                price: {
+                  type: "number",
+                  description: "Current pool price",
+                },
+                liquidity: {
+                  type: "string",
+                  description: "Current pool liquidity",
+                },
+              },
+            },
+            status: {
+              type: "string",
+              enum: ["processed", "skipped", "error"],
+              description: "Processing status",
+            },
+            action: {
+              type: "string",
+              description: "Action taken (MINT, REBALANCE, HOLD)",
+            },
+            tickLower: {
+              type: "integer",
+              description: "Lower tick of the position",
+            },
+            tickUpper: {
+              type: "integer",
+              description: "Upper tick of the position",
+            },
+            newTokenId: {
+              type: "integer",
+              description: "New position token ID (if minted)",
+            },
+            reason: {
+              type: "string",
+              description: "Reason for the action",
+            },
+            confidence: {
+              type: "integer",
+              description: "AI confidence score (0-100)",
+            },
+            txHashes: {
+              type: "array",
+              items: { type: "string" },
+              description: "Transaction hashes",
+            },
+            message: {
+              type: "string",
+              description: "Human-readable status message",
+            },
+            timestamp: {
+              type: "integer",
+              description: "Unix timestamp of the run",
+            },
+          },
+        },
+        ClosePositionsResult: {
+          type: "object",
+          properties: {
+            agentId: {
+              type: "integer",
+              description: "Agent ID that closed the positions",
+            },
+            agentDomain: {
+              type: "string",
+              description: "Agent domain name",
+            },
+            agentAddress: {
+              type: "string",
+              description: "Agent wallet address",
+            },
+            depositId: {
+              type: "integer",
+              description: "Deposit ID that positions were closed for",
+            },
+            pool: {
+              type: "object",
+              properties: {
+                tick: {
+                  type: "integer",
+                  description: "Current pool tick",
+                },
+                price: {
+                  type: "number",
+                  description: "Current pool price",
+                },
+                liquidity: {
+                  type: "string",
+                  description: "Current pool liquidity",
+                },
+              },
+            },
+            status: {
+              type: "string",
+              enum: ["success", "error", "no_positions"],
+              description: "Operation status",
+            },
+            positionsClosed: {
+              type: "integer",
+              description: "Number of positions closed",
+            },
+            closedTokenIds: {
+              type: "array",
+              items: { type: "integer" },
+              description: "Token IDs of closed positions",
+            },
+            txHashes: {
+              type: "array",
+              items: { type: "string" },
+              description: "Transaction hashes for each close operation",
+            },
+            message: {
+              type: "string",
+              description: "Human-readable status message",
+            },
+            timestamp: {
+              type: "integer",
+              description: "Unix timestamp of the operation",
+            },
+          },
+        },
       },
     },
   },
@@ -687,17 +832,26 @@ which manages concentrated liquidity positions on Uniswap V4 pools using AI-driv
 const swaggerSpec = swaggerJsdoc(options);
 
 export function setupSwagger(app: Express): void {
-  app.use(
-    "/api-docs",
-    swaggerUi.serve,
-    swaggerUi.setup(swaggerSpec, {
+  // Use CDN assets for Vercel serverless compatibility
+  // (swaggerUi.serve can't serve static files from node_modules in serverless)
+  const swaggerCdnUrl = "https://unpkg.com/swagger-ui-dist@5.11.0";
+
+  app.get("/api-docs", (_req, res) => {
+    const html = swaggerUi.generateHTML(swaggerSpec, {
       customCss: `
         .swagger-ui .topbar { display: none; }
         .swagger-ui .info .title { color: #6366f1; }
       `,
       customSiteTitle: "Liqu Finance API Documentation",
-    })
-  );
+      customCssUrl: `${swaggerCdnUrl}/swagger-ui.css`,
+      customJs: [
+        `${swaggerCdnUrl}/swagger-ui-bundle.js`,
+        `${swaggerCdnUrl}/swagger-ui-standalone-preset.js`,
+      ],
+    });
+    res.setHeader("Content-Type", "text/html");
+    res.send(html);
+  });
 
   // Serve raw OpenAPI spec
   app.get("/api-docs.json", (_req, res) => {
