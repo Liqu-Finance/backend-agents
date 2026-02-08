@@ -511,10 +511,14 @@
  *     summary: Rebalance deposit positions
  *     description: |
  *       Triggers an AI-powered rebalance for a deposit. This will:
- *       1. Close all existing positions
- *       2. Analyze the current pool state with Gemini AI
- *       3. Mint a new position with the optimal tick range
- *       
+ *       1. Request ERC-8004 on-chain validation
+ *       2. Close all existing positions
+ *       3. Analyze the current pool state with Gemini AI
+ *       4. Mint a new position with the optimal tick range
+ *       5. Submit ERC-8004 validation response with confidence score
+ *
+ *       The response includes full transaction details (`transactions.close`, `transactions.mint`, `transactions.validationHash`) for frontend tracking.
+ *
  *       **Note**: This operation executes on-chain transactions and may take several seconds.
  *     tags: [Operations]
  *     parameters:

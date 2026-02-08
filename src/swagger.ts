@@ -431,6 +431,49 @@ which manages concentrated liquidity positions on Uniswap V4 pools using AI-driv
             },
           },
         },
+        MintResult: {
+          type: "object",
+          description: "Result of a mint position transaction",
+          properties: {
+            tokenId: {
+              type: "integer",
+              nullable: true,
+              description: "Position NFT token ID (may be null if event parsing fails)",
+            },
+            txHash: {
+              type: "string",
+              description: "Transaction hash of the mint",
+              example: "0xabc123...",
+            },
+            liquidity: {
+              type: "string",
+              description: "Liquidity minted",
+            },
+            amount0: {
+              type: "string",
+              description: "Amount of token0 used",
+            },
+            amount1: {
+              type: "string",
+              description: "Amount of token1 used",
+            },
+          },
+        },
+        CloseResult: {
+          type: "object",
+          description: "Result of a close position transaction",
+          properties: {
+            tokenId: {
+              type: "integer",
+              description: "Position NFT token ID that was closed",
+            },
+            txHash: {
+              type: "string",
+              description: "Transaction hash of the close",
+              example: "0xdef456...",
+            },
+          },
+        },
         RebalanceResponse: {
           type: "object",
           properties: {
@@ -463,6 +506,10 @@ which manages concentrated liquidity positions on Uniswap V4 pools using AI-driv
             reason: {
               type: "string",
             },
+            confidence: {
+              type: "integer",
+              description: "AI confidence score (0-100)",
+            },
             pool: {
               type: "object",
               properties: {
@@ -471,6 +518,31 @@ which manages concentrated liquidity positions on Uniswap V4 pools using AI-driv
                 },
                 price: {
                   type: "number",
+                },
+              },
+            },
+            transactions: {
+              type: "object",
+              description: "On-chain transaction details for frontend tracking",
+              properties: {
+                close: {
+                  type: "array",
+                  description: "Tx hashes from closing previous positions",
+                  items: {
+                    $ref: "#/components/schemas/CloseResult",
+                  },
+                },
+                mint: {
+                  nullable: true,
+                  description: "Tx hash and details from minting new position",
+                  allOf: [
+                    { $ref: "#/components/schemas/MintResult" },
+                  ],
+                },
+                validationHash: {
+                  type: "string",
+                  nullable: true,
+                  description: "ERC-8004 validation data hash (keccak256)",
                 },
               },
             },
