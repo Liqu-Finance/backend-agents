@@ -9,12 +9,14 @@ import {
   getMyAssignedDeposits,
   tickToPrice,
 } from "../src/pool-reader";
-import { getTotalAgents, getValidationStatus, getAgentReputation } from "../src/erc8004-service";
+import { getTotalAgents, getValidationStatus, getAgentReputation, requestValidation, submitValidationResponse } from "../src/erc8004-service";
 import { analyzePoolWithGemini } from "../src/gemini-analyzer";
 import { executeRebalance } from "../src/tx-executor";
+import { initAgent } from "../src/agent";
 import { STRATEGY_MAP, StrategyName } from "../src/types";
 import { log, logError } from "../src/logger";
 import { runAgentOnce, getAgentInfo } from "../src/agent";
+import { setupSwagger } from "../src/swagger";
 
 // BigInt-safe JSON serializer
 function serialize(obj: unknown): unknown {
@@ -28,6 +30,9 @@ function serialize(obj: unknown): unknown {
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Setup Swagger documentation
+setupSwagger(app);
 
 // ─── Health Check ────────────────────────────
 app.get("/api/health", (_req, res) => {
@@ -351,8 +356,32 @@ app.post("/api/rebalance/:depositId", async (req, res) => {
       return;
     }
 
-    const newTokenId = await executeRebalance(depositId, decision.tickLower, decision.tickUpper);
+    // ERC-8004 validation: request before executing
+    const agentInfo = await initAgent();
+    let validationHash: string | null = null;
+    try {
+      validationHash = await requestValidation(
+        agentInfo.agentId,
+        agentInfo.agentId,
+        { depositId, action: "REBALANCE", tickLower: decision.tickLower, tickUpper: decision.tickUpper, timestamp: Date.now() }
+      );
+    } catch (err) {
+      logError("Validation request failed during rebalance", err);
+    }
 
+    // Execute: close all existing → mint new position
+    const rebalanceResult = await executeRebalance(depositId, decision.tickLower, decision.tickUpper);
+
+    // ERC-8004 validation: submit response after execution
+    if (validationHash) {
+      try {
+        await submitValidationResponse(validationHash, Math.min(decision.confidence, 100));
+      } catch (err) {
+        logError("Validation response failed during rebalance", err);
+      }
+    }
+
+    // Re-read deposit for updated state
     const updatedDeposit = await getDepositInfo(depositId);
 
     res.json(
@@ -361,13 +390,19 @@ app.post("/api/rebalance/:depositId", async (req, res) => {
         strategy: strategyName,
         action: "REBALANCE",
         previousPositions: deposit.positionTokenIds,
-        newPosition: newTokenId ?? null,
+        newPosition: rebalanceResult.newTokenId ?? null,
         newTickLower: decision.tickLower,
         newTickUpper: decision.tickUpper,
         reason: decision.reason,
+        confidence: decision.confidence,
         pool: {
           tick: poolState.tick,
           price: currentPrice,
+        },
+        transactions: {
+          close: rebalanceResult.closeTxHashes,
+          mint: rebalanceResult.mintResult,
+          validationHash,
         },
         updatedDeposit: {
           amount0Remaining: updatedDeposit.amount0Remaining,

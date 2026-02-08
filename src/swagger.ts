@@ -681,7 +681,7 @@ which manages concentrated liquidity positions on Uniswap V4 pools using AI-driv
       },
     },
   },
-  apis: ["./src/swagger-docs.ts"],
+  apis: [__dirname + "/swagger-docs.ts", __dirname + "/swagger-docs.js"],
 };
 
 const swaggerSpec = swaggerJsdoc(options);
